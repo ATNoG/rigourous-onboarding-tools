@@ -1,9 +1,7 @@
 import asyncio
+import json
 import logging
 import time
-
-import os
-import psutil
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request, status
@@ -57,19 +55,13 @@ logging_level = {
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging_level.get(settings.log_level.upper()), format='%(asctime)s %(levelname)s: %(message)s')
 
-process = psutil.Process(os.getpid())
-
 async def handle_mtd_actions(openslice_host: str):
     mtd_actions: Dict[str, List[MtdAction]] = {}
     tmf_api_connector = TmfApiConnector(f"http://{openslice_host}")
-    start_mem = process.memory_info().rss
     while True:
         start_time = time.monotonic()
         _update_mtd_actions_from_service_orders(mtd_actions, tmf_api_connector)
         _update_service_orders(mtd_actions, tmf_api_connector)
-        diff_mem = process.memory_info().rss - start_mem
-        print("Memory diff:", diff_mem)
-        print(mtd_actions)
         elapsed_time = time.monotonic() - start_time
         logging.debug(f"Elapsed time: {elapsed_time}")
         await asyncio.sleep(max(60.0 - elapsed_time, 1.0))
@@ -85,7 +77,6 @@ def _update_mtd_actions_from_service_orders(mtd_actions: Dict[str, List[MtdActio
     logging.debug(f"Scheduled MTD actions: {mtd_actions}")
 
 def _update_service_orders(mtd_actions: Dict[str, List[MtdAction]], tmf_api_connector: TmfApiConnector):
-    start_time = time.monotonic()
     for service_order_id, value in mtd_actions.items():
         service_order_characteristics = []
         for mtd_action in value:
@@ -95,8 +86,6 @@ def _update_service_orders(mtd_actions: Dict[str, List[MtdAction]], tmf_api_conn
         if service_order_characteristics:
             tmf_api_connector.update_service_order(service_order_id, ServiceSpec(serviceSpecCharacteristic=service_order_characteristics))
             logging.debug(f"Updating Service Order {service_order_id} with characteristics {service_order_characteristics}")
-    elapsed_time = time.monotonic() - start_time
-    print("Elapsed time:", elapsed_time)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -174,10 +163,12 @@ async def handle_risk_specification(risk_specification: RiskSpecification) -> Li
             continue
         logging.debug(service_spec.get_characteristic("CPE"))
         if service_spec.get_characteristic("CPE") == risk_specification.cpe:
-            if risk_specification.privacy_score:
+            if risk_specification.privacy_score is not None:
                 service_spec.set_characteristic("Privacy score", str(risk_specification.privacy_score))
-            if risk_specification.risk_score:
+            if risk_specification.risk_score is not None:
                 service_spec.set_characteristic("Risk score", str(risk_specification.risk_score))
+            if risk_specification.anomalies:
+                service_spec.set_characteristic("Anomalies", ", ".join(json.dumps(anomaly) for anomaly in risk_specification.anomalies))
             if tmf_api_connector.update_service_spec(service_spec):
                 affected_service_specs.append(service_spec)
     return affected_service_specs

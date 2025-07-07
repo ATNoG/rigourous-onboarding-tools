@@ -75,7 +75,6 @@ class Tmf(OpenSlice):
                                 auth=self._auth)
         if response.status_code != requests.codes.ok:
             super().handle_response_not_ok(response)
-        print("HERE:", ServiceSpec(**response.json()))
         try:
             return ServiceSpec(**response.json())
         except:

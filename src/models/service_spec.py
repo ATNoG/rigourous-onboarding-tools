@@ -98,16 +98,23 @@ class ServiceSpecCharacteristic(BaseModel):
         value_from = None
         value_to = None
         for service_spec_characteristic_value in service_spec_characteristic.get("serviceSpecCharacteristicValue", []):
-            if service_spec_characteristic_value.dict().get("value", {}).get("alias", "") == "valueFrom":
-                value_from = service_spec_characteristic_value.dict().get("value", {}).get("value", "")
-            elif service_spec_characteristic_value.dict().get("value", {}).get("alias", "") == "valueTo":
-                value_to = service_spec_characteristic_value.dict().get("value", {}).get("value", "")
+            if service_spec_characteristic_value and isinstance(service_spec_characteristic_value, dict):
+                if (service_spec_characteristic_value.get("value", {}) or {"yo": "gurt"}).get("alias", "") == "valueFrom":
+                    value_from = service_spec_characteristic_value.get("value", {}).get("value", "")
+                elif (service_spec_characteristic_value.get("value", {}) or {"yo": "gurt"}).get("alias", "") == "valueTo":
+                    value_to = service_spec_characteristic_value.get("value", {}).get("value", "")
+            else:
+                if service_spec_characteristic_value.dict().get("value", {}).get("alias", "") == "valueFrom":
+                    value_from = service_spec_characteristic_value.dict().get("value", {}).get("value", "")
+                elif service_spec_characteristic_value.dict().get("value", {}).get("alias", "") == "valueTo":
+                    value_to = service_spec_characteristic_value.dict().get("value", {}).get("value", "")
         for service_spec_characteristic_value in service_spec_characteristic.get("serviceSpecCharacteristicValue", []):
-            if service_spec_characteristic_value.dict().get("value", {}).get("alias", "") == "interval":
-                try:
+            if service_spec_characteristic_value and isinstance(service_spec_characteristic_value, dict):
+                if (service_spec_characteristic_value.get("value", {}) or {"yo": "gurt"}).get("alias", "") == "interval":
                     service_spec_characteristic_value["valueFrom"] = value_from
                     service_spec_characteristic_value["valueTo"] = value_to
-                except:
+            else:
+                if service_spec_characteristic_value.dict().get("value", {}).get("alias", "") == "interval":
                     service_spec_characteristic_value.value_from = value_from
                     service_spec_characteristic_value.value_to = value_to
         return service_spec_characteristic
@@ -200,8 +207,18 @@ class ServiceSpec(BaseModel):
         characteristic = self._find_characteristic_by_suffix(name)
         if characteristic:
             characteristic.service_spec_characteristic_value = [
-                ServiceSpecCharacteristicValue(value=ServiceSpecCharacteristicValueAndAlias.from_string(value), isDefault=True, valueType="FLOAT")
+                ServiceSpecCharacteristicValue(value=ServiceSpecCharacteristicValueAndAlias.from_string(value), isDefault=True, valueType="TEXT")
             ]
+        else:
+            self.service_spec_characteristic.append(ServiceSpecCharacteristic(
+                name=name,
+                valueType="TEXT",
+                minCardinality=0,
+                maxCardinality=1,
+                serviceSpecCharacteristicValue=[
+                    ServiceSpecCharacteristicValue(value=ServiceSpecCharacteristicValueAndAlias.from_string(value), isDefault=True, valueType="TEXT")
+                ]
+            ))
 
     def _find_characteristic_by_suffix(self, suffix: str) -> Optional[ServiceSpecCharacteristic]:
         for service_spec_characteristic in self.service_spec_characteristic:
