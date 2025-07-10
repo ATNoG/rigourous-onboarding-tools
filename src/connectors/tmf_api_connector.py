@@ -3,7 +3,6 @@ from typing import List, Optional
 
 from apis.auth import Auth as AuthApi
 from apis.tmf import Tmf as TmfApi
-from models.service_inventory import ServiceInventory
 from models.service_order import ServiceOrder
 from models.service_spec import ServiceSpec, ServiceSpecCharacteristic, ServiceSpecCharacteristicValue, ServiceSpecCharacteristicValueAndAlias, ServiceSpecWithAction
 
@@ -12,6 +11,11 @@ class TmfApiConnector:
 
     def __init__(self, url: str):
         token = AuthApi(url).get_token()
+        if not token:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Could not get authorization token from OpenSlice"
+            )
         self._api = TmfApi(url, token)
 
     def get_service_order(self, id: str) -> Optional[ServiceOrder]:

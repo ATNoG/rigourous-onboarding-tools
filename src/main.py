@@ -183,15 +183,18 @@ async def handle_nmtd_policy(service_spec: ServiceSpecWithAction) -> List[Servic
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Missing service 'name' or 'id' from provided Service Specification"
         )
-    service_orders = []
-    tmf_api_connector = TmfApiConnector(f"http://{settings.openslice_host}")
-    service_order_ids = tmf_api_connector.get_ids_of_service_orders_using_service_spec(service_spec)
-    logging.debug(f"Service Orders using Service Specification: {service_order_ids}")
-    for service_order_id in service_order_ids:
-        service_order = tmf_api_connector.update_service_order(service_order_id, service_spec)
-        if service_order:
-            service_orders.append(service_order)
-    return service_orders
+    try:
+        service_orders = []
+        tmf_api_connector = TmfApiConnector(f"http://{settings.openslice_host}")
+        service_order_ids = tmf_api_connector.get_ids_of_service_orders_using_service_spec(service_spec)
+        logging.debug(f"Service Orders using Service Specification: {service_order_ids}")
+        for service_order_id in service_order_ids:
+            service_order = tmf_api_connector.update_service_order(service_order_id, service_spec)
+            if service_order:
+                service_orders.append(service_order)
+        return service_orders
+    except HTTPException:
+        return []
 
 @app.post(f"/v{VERSION}/telemetry", tags=["Security Orchestrator Policies"], responses={
     status.HTTP_400_BAD_REQUEST: {"description": "Missing service 'name' or 'id' from provided Service Specification"},

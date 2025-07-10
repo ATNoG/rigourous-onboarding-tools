@@ -10,14 +10,18 @@ class Auth(OpenSlice):
         self._url += self.AUTH_URL
 
     def get_token(self) -> str:
-        response = requests.post(self._url + "/token", 
-                                headers={"Content-Type": "application/x-www-form-urlencoded"},
-                                data={
-                                    "username": "admin", 
-                                    "password": "admin", 
-                                    "grant_type": "password",
-                                    "client_id": "osapiWebClientId"
-                                })
-        if response.status_code != requests.codes.ok:
-            super().handle_response_not_ok(response)
-        return response.json()["access_token"]
+        try:
+            response = requests.post(self._url + "/token", 
+                                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                                    data={
+                                        "username": "admin", 
+                                        "password": "admin", 
+                                        "grant_type": "password",
+                                        "client_id": "osapiWebClientId"
+                                    },
+                                    timeout=5)
+            if response.status_code != requests.codes.ok:
+                super().handle_response_not_ok(response)
+            return response.json()["access_token"]
+        except requests.RequestException:
+            return ""
