@@ -12,4 +12,8 @@ COPY ./requirements.txt /app
 
 RUN python3 -m pip install -r requirements.txt
 
-CMD ["fastapi", "run", "main.py"]
+ENV PORT=8000
+
+EXPOSE ${PORT}
+
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port $PORT"]

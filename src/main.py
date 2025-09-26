@@ -12,6 +12,7 @@ from apis.security_orchestrator import SecurityOrchestrator
 from connectors.tmf_api_connector import TmfApiConnector
 from models.mtd_action import MtdAction
 from models.risk_specification import RiskSpecification
+from models.service_inventory import ServiceInventory
 from models.service_order import ServiceOrder
 from models.service_spec import ServiceSpec, ServiceSpecType, ServiceSpecWithAction
 from models.so_policy import ChannelProtectionPolicy, FirewallPolicy, PolicyType, SiemPolicy, TelemetryPolicy
@@ -146,32 +147,39 @@ async def handle_openslice_service_order(service_order_id: str, mspl: Request) -
     status.HTTP_400_BAD_REQUEST: {"description": "Missing attribute 'cpe' in Risk Specification"},
     status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Could not reach OpenSlice"}
 })
-async def handle_risk_specification(risk_specification: RiskSpecification) -> List[ServiceSpec]:
+async def handle_risk_specification(risk_specification: RiskSpecification) -> List[ServiceInventory]:
     if not risk_specification.cpe:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Missing attribute 'cpe' in Risk Specification"
         )
-    affected_service_specs = []
-    tmf_api_connector = TmfApiConnector(f"http://{settings.openslice_host}")
-    service_spec_ids = [service_spec.id for service_spec in tmf_api_connector.list_service_specs() if service_spec.type == ServiceSpecType.CFSS]
-    logging.debug(f"Service Specs: {service_spec_ids}")
-    for service_spec_id in service_spec_ids:
-        service_spec = tmf_api_connector.get_service_spec(service_spec_id)
-        logging.debug(service_spec)
-        if not service_spec:
-            continue
-        logging.debug(service_spec.get_characteristic("CPE"))
-        if service_spec.get_characteristic("CPE") == risk_specification.cpe:
-            if risk_specification.privacy_score is not None:
-                service_spec.set_characteristic("Privacy score", str(risk_specification.privacy_score))
-            if risk_specification.risk_score is not None:
-                service_spec.set_characteristic("Risk score", str(risk_specification.risk_score))
-            if risk_specification.anomalies:
-                service_spec.set_characteristic("Anomalies", ", ".join(json.dumps(anomaly) for anomaly in risk_specification.anomalies))
-            if tmf_api_connector.update_service_spec(service_spec):
-                affected_service_specs.append(service_spec)
-    return affected_service_specs
+    try:
+        service_inventories = []
+        tmf_api_connector = TmfApiConnector(f"http://{settings.openslice_host}")
+        service_spec_ids = [service_spec.id for service_spec in tmf_api_connector.list_service_specs() if service_spec.type == ServiceSpecType.CFSS]
+        logging.debug(f"Service Specs: {service_spec_ids}")
+        for service_spec_id in service_spec_ids:
+            service_spec = tmf_api_connector.get_service_spec(service_spec_id)
+            logging.debug(service_spec)
+            if not service_spec:
+                continue
+            logging.debug(service_spec.get_characteristic("CPE"))
+            if service_spec.get_characteristic("CPE") == risk_specification.cpe:
+                if risk_specification.privacy_score is not None:
+                    service_spec.set_characteristic("Privacy score", str(risk_specification.privacy_score))
+                if risk_specification.risk_score is not None:
+                    service_spec.set_characteristic("Risk score", str(risk_specification.risk_score))
+                if risk_specification.anomalies:
+                    service_spec.set_characteristic("Anomalies", ", ".join(json.dumps(anomaly) for anomaly in risk_specification.anomalies))
+                service_inventory_ids = tmf_api_connector.get_ids_of_active_service_inventories_from_service_spec_name(service_spec.name)
+                logging.debug(f"Service Inventories using Service Specification: {service_inventory_ids}")
+                for service_inventory_id in service_inventory_ids:
+                    service_inventory = tmf_api_connector.update_service_inventory(service_inventory_id, service_spec)
+                    if service_inventory:
+                        service_inventories.append(service_inventory)
+        return service_inventories
+    except HTTPException:
+        return []
 
 @app.post(f"/v{VERSION}/so", tags=["Security Orchestrator Policies"], responses={
     status.HTTP_400_BAD_REQUEST: {"description": "Missing service 'name' or 'id' from provided Service Specification"},

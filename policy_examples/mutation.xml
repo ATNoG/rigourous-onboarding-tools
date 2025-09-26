@@ -16,13 +16,8 @@
             <isCNF>false</isCNF>
             <id>b531dfa9-5705-428e-9005-008bb521f1cf</id>
             <mutationClass>
-              <name>Mutation::Port</name>
-              <value>min</value>
-              <alias>interval</alias>
-            </mutationClass>
-             <mutationClass>
-              <name>Mutation::image</name>
-              <value>max</value>
+              <name>Mutation::All</name>
+              <value>random</value>
               <alias>interval</alias>
             </mutationClass>
           </mutationParameters>

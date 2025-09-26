@@ -3,6 +3,7 @@ from typing import List, Optional
 
 from apis.auth import Auth as AuthApi
 from apis.tmf import Tmf as TmfApi
+from models.service_inventory import ServiceInventory
 from models.service_order import ServiceOrder
 from models.service_spec import ServiceSpec, ServiceSpecCharacteristic, ServiceSpecCharacteristicValue, ServiceSpecCharacteristicValueAndAlias, ServiceSpecWithAction
 
@@ -112,6 +113,47 @@ class TmfApiConnector:
         service_order.order_items = order_items
         return service_order
     
+    def update_service_inventory(self, service_inventory_id: str, service_spec: ServiceSpec) -> Optional[ServiceInventory]:
+        service_inventory = self.get_service_inventory(service_inventory_id)
+        if not service_inventory:
+            return None
+        updated_service_inventory = \
+            self._get_service_inventory_with_updated_characteristics(service_inventory, service_spec)
+        if updated_service_inventory:
+            self._api.update_service_inventory(service_inventory_id, updated_service_inventory.__json__())
+        return updated_service_inventory
+    
+    def _get_service_inventory_with_updated_characteristics(
+        self, 
+        service_inventory: ServiceInventory, 
+        service_spec: ServiceSpec
+    ) -> Optional[ServiceOrder]:
+        INTERVAL_ALIAS = "interval"
+        for service_spec_characteristic in service_spec.service_spec_characteristic:
+            if "mutation::all" == service_spec_characteristic.name.lower():
+                for service_inventory_characteristic in service_inventory.service_spec_characteristic:
+                    if service_inventory_characteristic.name.lower().startswith("mutation::"):
+                        service_spec.service_spec_characteristic.append(ServiceSpecCharacteristic(
+                            name=service_inventory_characteristic.name, 
+                            serviceSpecCharacteristicValue=[
+                                ServiceSpecCharacteristicValue(value=ServiceSpecCharacteristicValueAndAlias(
+                                    value=service_spec_characteristic.find_value_from_alias(INTERVAL_ALIAS), 
+                                    alias=INTERVAL_ALIAS
+                                ))
+                            ]
+                        ))
+        service_spec_chars_names = [service_spec_characteristic.name for service_spec_characteristic in \
+                                service_spec.service_spec_characteristic]
+        matching_service_inventory_chars = [service_inventory_characteristic for service_inventory_characteristic in \
+                                        service_inventory.service_spec_characteristic if \
+                                        service_inventory_characteristic.name in service_spec_chars_names]
+        updated_service_inventory_characteristics = \
+            self._get_updated_service_spec_characteristics(service_spec, matching_service_inventory_chars)
+        if updated_service_inventory_characteristics:
+            service_inventory.service_spec_characteristic = updated_service_inventory_characteristics
+            # order_item.action = "modify"
+        return service_inventory
+    
     def _get_updated_service_spec_characteristics(
         self, 
         service_spec: ServiceSpec, 
@@ -164,3 +206,19 @@ class TmfApiConnector:
         if not service_spec.id:
             return None
         return self._api.update_service_spec(service_spec.id, service_spec.__json__())
+    
+    def get_ids_of_active_service_inventories_from_service_spec_name(self, service_spec: str) -> List[str]:
+        try:
+            return [service_inventory.id for service_inventory in self._api.list_service_inventories() if \
+                    service_inventory.state == "active" and service_inventory.service_type == service_spec]
+        except HTTPException:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Could not get Service Inventories from OpenSlice"
+            )
+        
+    def get_service_inventory(self, id: str) -> Optional[ServiceInventory]:
+        try:
+            return self._api.get_service_inventory(id)
+        except HTTPException:
+            return None
