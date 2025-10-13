@@ -1,4 +1,4 @@
-# RIGOUROUS OSL-SO Orchestrator
+# RIGOUROUS Onboarding Tools
 
 ![Diagram](./integration_diagram.png)
 
