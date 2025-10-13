@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 import time
 
@@ -12,10 +11,9 @@ from apis.security_orchestrator import SecurityOrchestrator
 from connectors.tmf_api_connector import TmfApiConnector
 from models.mtd_action import MtdAction
 from models.risk_specification import RiskSpecification
-from models.service_inventory import ServiceInventory
 from models.service_order import ServiceOrder
 from models.service_spec import ServiceSpec, ServiceSpecType, ServiceSpecWithAction
-from models.so_policy import ChannelProtectionPolicy, FirewallPolicy, PolicyType, SiemPolicy, TelemetryPolicy
+from models.so_policy import ChannelProtectionPolicy, FirewallPolicy, Policy, PolicyType, SiemPolicy, TelemetryPolicy
 from settings import settings
 
 VERSION = 2
@@ -85,7 +83,7 @@ def _update_service_orders(mtd_actions: Dict[str, List[MtdAction]], tmf_api_conn
             if service_characteristic:
                 service_order_characteristics.append(service_characteristic)
         if service_order_characteristics:
-            tmf_api_connector.update_service_order(service_order_id, ServiceSpec(serviceSpecCharacteristic=service_order_characteristics))
+            tmf_api_connector.update_service_order_and_inventories(service_order_id, ServiceSpec(serviceSpecCharacteristic=service_order_characteristics))
             logging.debug(f"Updating Service Order {service_order_id} with characteristics {service_order_characteristics}")
 
 @asynccontextmanager
@@ -147,37 +145,23 @@ async def handle_openslice_service_order(service_order_id: str, mspl: Request) -
     status.HTTP_400_BAD_REQUEST: {"description": "Missing attribute 'cpe' in Risk Specification"},
     status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Could not reach OpenSlice"}
 })
-async def handle_risk_specification(risk_specification: RiskSpecification) -> List[ServiceInventory]:
+async def handle_risk_specification(risk_specification: RiskSpecification) -> List[ServiceOrder]:
     if not risk_specification.cpe:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Missing attribute 'cpe' in Risk Specification"
         )
     try:
-        service_inventories = []
+        service_orders = []
         tmf_api_connector = TmfApiConnector(f"http://{settings.openslice_host}")
         service_spec_ids = [service_spec.id for service_spec in tmf_api_connector.list_service_specs() if service_spec.type == ServiceSpecType.CFSS]
         logging.debug(f"Service Specs: {service_spec_ids}")
         for service_spec_id in service_spec_ids:
             service_spec = tmf_api_connector.get_service_spec(service_spec_id)
-            logging.debug(service_spec)
-            if not service_spec:
-                continue
-            logging.debug(service_spec.get_characteristic("CPE"))
-            if service_spec.get_characteristic("CPE") == risk_specification.cpe:
-                if risk_specification.privacy_score is not None:
-                    service_spec.set_characteristic("Privacy score", str(risk_specification.privacy_score))
-                if risk_specification.risk_score is not None:
-                    service_spec.set_characteristic("Risk score", str(risk_specification.risk_score))
-                if risk_specification.anomalies:
-                    service_spec.set_characteristic("Anomalies", ", ".join(json.dumps(anomaly) for anomaly in risk_specification.anomalies))
-                service_inventory_ids = tmf_api_connector.get_ids_of_active_service_inventories_from_service_spec_name(service_spec.name)
-                logging.debug(f"Service Inventories using Service Specification: {service_inventory_ids}")
-                for service_inventory_id in service_inventory_ids:
-                    service_inventory = tmf_api_connector.update_service_inventory(service_inventory_id, service_spec)
-                    if service_inventory:
-                        service_inventories.append(service_inventory)
-        return service_inventories
+            if service_spec:
+                if service_spec.update_risk(risk_specification):
+                    service_orders.extend(tmf_api_connector.update_service_orders_and_inventories_from_service_spec(service_spec))
+        return service_orders
     except HTTPException:
         return []
 
@@ -192,15 +176,8 @@ async def handle_nmtd_policy(service_spec: ServiceSpecWithAction) -> List[Servic
             detail="Missing service 'name' or 'id' from provided Service Specification"
         )
     try:
-        service_orders = []
         tmf_api_connector = TmfApiConnector(f"http://{settings.openslice_host}")
-        service_order_ids = tmf_api_connector.get_ids_of_service_orders_using_service_spec(service_spec)
-        logging.debug(f"Service Orders using Service Specification: {service_order_ids}")
-        for service_order_id in service_order_ids:
-            service_order = tmf_api_connector.update_service_order(service_order_id, service_spec)
-            if service_order:
-                service_orders.append(service_order)
-        return service_orders
+        return tmf_api_connector.update_service_orders_and_inventories_from_service_spec(service_spec)
     except HTTPException:
         return []
 
@@ -209,47 +186,35 @@ async def handle_nmtd_policy(service_spec: ServiceSpecWithAction) -> List[Servic
     status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Could not reach OpenSlice"}
 })
 async def handle_telemetry_policy(telemetry_configuration: TelemetryPolicy) -> Optional[ServiceOrder]:
-    service_spec = telemetry_configuration.to_service_spec()
-    if not service_orders_waiting_policies[PolicyType.TELEMETRY].empty():
-        service_order_id = await service_orders_waiting_policies[PolicyType.TELEMETRY].get()
-        tmf_api_connector = TmfApiConnector(f"http://{settings.openslice_host}")
-        return tmf_api_connector.update_service_order(service_order_id, service_spec)
-    return None
+    return await _handle_so_policy(telemetry_configuration)
 
 @app.post(f"/v{VERSION}/firewall", tags=["Security Orchestrator Policies"], responses={
     status.HTTP_400_BAD_REQUEST: {"description": "Missing service 'name' or 'id' from provided Service Specification"},
     status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Could not reach OpenSlice"}
 })
 async def handle_firewall_policy(firewall_configuration: FirewallPolicy) -> Optional[ServiceOrder]:
-    service_spec = firewall_configuration.to_service_spec()
-    if not service_orders_waiting_policies[PolicyType.FIREWALL].empty():
-        service_order_id = await service_orders_waiting_policies[PolicyType.FIREWALL].get()
-        tmf_api_connector = TmfApiConnector(f"http://{settings.openslice_host}")
-        return tmf_api_connector.update_service_order(service_order_id, service_spec)
-    return None
+    return await _handle_so_policy(firewall_configuration)
 
 @app.post(f"/v{VERSION}/siem", tags=["Security Orchestrator Policies"], responses={
     status.HTTP_400_BAD_REQUEST: {"description": "Missing service 'name' or 'id' from provided Service Specification"},
     status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Could not reach OpenSlice"}
 })
 async def handle_siem_policy(siem_configuration: SiemPolicy) -> Optional[ServiceOrder]:
-    service_spec = siem_configuration.to_service_spec()
-    if not service_orders_waiting_policies[PolicyType.SIEM].empty():
-        service_order_id = await service_orders_waiting_policies[PolicyType.SIEM].get()
-        tmf_api_connector = TmfApiConnector(f"http://{settings.openslice_host}")
-        return tmf_api_connector.update_service_order(service_order_id, service_spec)
-    return None
+    return await _handle_so_policy(siem_configuration)
 
 @app.post(f"/v{VERSION}/channelProtection", tags=["Security Orchestrator Policies"], responses={
     status.HTTP_400_BAD_REQUEST: {"description": "Missing service 'name' or 'id' from provided Service Specification"},
     status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Could not reach OpenSlice"}
 })
 async def handle_channel_protection_policy(channel_protection_configuration: ChannelProtectionPolicy) -> Optional[ServiceOrder]:
-    service_spec = channel_protection_configuration.to_service_spec()
-    if not service_orders_waiting_policies[PolicyType.CHANNEL_PROTECTION].empty():
-        service_order_id = await service_orders_waiting_policies[PolicyType.CHANNEL_PROTECTION].get()
+    return await _handle_so_policy(channel_protection_configuration)
+
+async def _handle_so_policy(policy: Policy) -> Optional[ServiceOrder]:
+    service_spec = policy.to_service_spec()
+    if not service_orders_waiting_policies[policy.get_type()].empty():
+        service_order_id = await service_orders_waiting_policies[policy.get_type()].get()
         tmf_api_connector = TmfApiConnector(f"http://{settings.openslice_host}")
-        return tmf_api_connector.update_service_order(service_order_id, service_spec)
+        return tmf_api_connector.update_service_order_and_inventories(service_order_id, service_spec)
     return None
 
 if __name__ == "__main__":

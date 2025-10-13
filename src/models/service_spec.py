@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Any, List, Optional
 
 from models.action_type import ActionType
+from models.risk_specification import RiskSpecification
 
 class ServiceSpecType(str, Enum):
     CFSS = "CustomerFacingServiceSpecification"
@@ -196,6 +197,17 @@ class ServiceSpec(BaseModel):
     type: Optional[ServiceSpecType] = Field(alias="@type", default=None)
     service_spec_characteristic: Optional[List[ServiceSpecCharacteristic]] = \
         Field(alias="serviceSpecCharacteristic", default=[])
+    
+    def update_risk(self, risk_specification: RiskSpecification) -> bool:
+        if self.get_characteristic("CPE") == risk_specification.cpe:
+            if risk_specification.privacy_score is not None:
+                self.set_characteristic("Privacy score", str(risk_specification.privacy_score))
+            if risk_specification.risk_score is not None:
+                self.set_characteristic("Risk score", str(risk_specification.risk_score))
+            if risk_specification.anomalies:
+                self.set_characteristic("Anomalies", ", ".join(json.dumps(anomaly) for anomaly in risk_specification.anomalies))
+            return True
+        return False
     
     def get_characteristic(self, name: str) -> Optional[str]:
         characteristic = self._find_characteristic_by_suffix(name)

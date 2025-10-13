@@ -39,6 +39,10 @@ class Policy(BaseModel, ABC):
         )
     
     @abstractmethod
+    def get_type(self) -> PolicyType:
+        pass
+    
+    @abstractmethod
     def __json__(self) -> dict:
         pass
 
@@ -52,6 +56,9 @@ class ChannelProtectionPolicy(Policy):
 
     def to_service_spec(self, service_name: str="RIGOUROUS Channel Protection") -> ServiceSpecWithAction:
         return super().to_service_spec(service_name)
+    
+    def get_type(self) -> PolicyType:
+        return PolicyType.CHANNEL_PROTECTION
     
     def __json__(self) -> dict:
         res = {}
@@ -78,6 +85,9 @@ class FirewallPolicy(Policy):
     def to_service_spec(self, service_name: str="RIGOUROUS Firewall") -> ServiceSpecWithAction:
         return super().to_service_spec(service_name)
     
+    def get_type(self) -> PolicyType:
+        return PolicyType.FIREWALL
+    
     def __json__(self) -> dict:
         res = {}
         if self.name:
@@ -93,6 +103,9 @@ class FirewallPolicy(Policy):
 class SiemPolicy(Policy):
     def to_service_spec(self, service_name: str="RIGOUROUS SIEM") -> ServiceSpecWithAction:
         return super().to_service_spec(service_name)
+    
+    def get_type(self) -> PolicyType:
+        return PolicyType.SIEM
     
     def __json__(self) -> dict:
         return {}
@@ -118,6 +131,9 @@ class TelemetryPolicy(Policy):
 
     def to_service_spec(self, service_name: str="RIGOUROUS Telemetry") -> ServiceSpecWithAction:
         return super().to_service_spec(service_name)
+    
+    def get_type(self) -> PolicyType:
+        return PolicyType.TELEMETRY
     
     def __json__(self) -> dict:
         res = {}

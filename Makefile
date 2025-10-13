@@ -6,7 +6,7 @@ build:
 	docker build --network=host -t onboarding-tools .
 
 run:
-	docker run --network=host -e OPENSLICE_HOST=10.255.32.80 -e LOG_LEVEL=DEBUG onboarding-tools
+	docker run --network=host -e OPENSLICE_HOST=10.255.31.117 -e PORT=8004 -e LOG_LEVEL=DEBUG onboarding-tools
 
 push:
 	docker build --network=host -t diogosantosua/onboarding-tools:latest .
