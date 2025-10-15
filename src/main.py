@@ -66,10 +66,10 @@ async def handle_mtd_actions(openslice_host: str):
         await asyncio.sleep(max(60.0 - elapsed_time, 1.0))
 
 def _update_mtd_actions_from_service_orders(mtd_actions: Dict[str, List[MtdAction]], tmf_api_connector: TmfApiConnector):
-    active_service_order_ids = [service_order.id for service_order in tmf_api_connector.list_service_orders() if service_order.id]
+    active_service_order_ids = [service_order.id for service_order in tmf_api_connector.list_active_service_orders() if service_order.id]
     for service_order_id in active_service_order_ids:
         service_order = tmf_api_connector.get_service_order(service_order_id)
-        if service_order and service_order.is_active():
+        if service_order:
             list_of_mtd_actions = MtdAction.from_service_order(service_order, mtd_actions.get(service_order_id, []))
             if list_of_mtd_actions:
                 mtd_actions[service_order_id] = list_of_mtd_actions

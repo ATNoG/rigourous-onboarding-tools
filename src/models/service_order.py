@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
@@ -74,10 +75,11 @@ class ServiceOrder(BaseModel):
     order_items: Optional[List[OrderItem]] = Field(alias="orderItem", default=None)
 
     def is_active(self) -> bool:
-        if not self.order_items:
+        if self.state != "COMPLETED":
             return False
-        states = set([order_item.service.state for order_item in self.order_items])
-        return "terminated" not in states
+        completion_time = datetime.fromisoformat(self.expected_completion_date.replace("Z", "+00:00"))
+        now = datetime.now(timezone.utc)
+        return now < completion_time
     
     def uses_service_spec(self, service_spec: ServiceSpec) -> bool:
         if not self.order_items:
