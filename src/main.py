@@ -16,8 +16,6 @@ from models.service_spec import ServiceSpec, ServiceSpecType, ServiceSpecWithAct
 from models.so_policy import ChannelProtectionPolicy, FirewallPolicy, Policy, PolicyType, SiemPolicy, TelemetryPolicy
 from settings import settings
 
-VERSION = 2
-
 description = """
 The Onboarding Tools is capable of performing Moving Target Defense operations on KNF-based network services; receive and enforce policies from the Security Orchestrator; and receive and update the risk score of services based on a Risk Specification provided by the Threat Risk Assessor and Privacy Quantifier from the RIGOUROUS project.
 """
@@ -98,7 +96,7 @@ app = FastAPI(
     title="Onboarding Tools",
     description=description,
     summary="Onboard and configure KNF-based network services.",
-    version=f"0.0.{VERSION}",
+    version=f"{settings.version}.{settings.sub_version}",
     openapi_tags=metadata_tags
 )
 
@@ -117,19 +115,19 @@ service_orders_waiting_policies = {
     PolicyType.TELEMETRY: asyncio.Queue()
 }
 
-@app.get(f"/v{VERSION}/serviceOrders", tags=["Service Orders"], responses={
+@app.get(f"/v{settings.version}/serviceOrders", tags=["Service Orders"], responses={
     status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Could not get Service Orders from OpenSlice"}
 })
 def list_service_orders() -> List[str]:
     return [service_order.id for service_order in TmfApiConnector(f"http://{settings.openslice_host}").list_active_service_orders() if service_order.id]
 
-@app.get(f"/v{VERSION}/serviceSpecs", tags=["Service Specifications"], responses={
+@app.get(f"/v{settings.version}/serviceSpecs", tags=["Service Specifications"], responses={
     status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Could not get Service Specifications from OpenSlice"}
 })
 def list_service_specs() -> List[str]:
     return [service_spec.name for service_spec in TmfApiConnector(f"http://{settings.openslice_host}").list_service_specs() if service_spec.name]
 
-@app.post(f"/v{VERSION}" + "/osl/{service_order_id}", tags=["Services"], responses={
+@app.post(f"/v{settings.version}" + "/osl/{service_order_id}", tags=["Services"], responses={
 })
 async def handle_openslice_service_order(service_order_id: str, mspl: Request) -> str:
     mspl_body = await mspl.body()
@@ -141,7 +139,7 @@ async def handle_openslice_service_order(service_order_id: str, mspl: Request) -
             return service_order_id
     return ""
 
-@app.post(f"/v{VERSION}/risk", tags=["Risk Specification"], responses={
+@app.post(f"/v{settings.version}/risk", tags=["Risk Specification"], responses={
     status.HTTP_400_BAD_REQUEST: {"description": "Missing attribute 'cpe' in Risk Specification"},
     status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Could not reach OpenSlice"}
 })
@@ -165,7 +163,7 @@ async def handle_risk_specification(risk_specification: RiskSpecification) -> Li
     except HTTPException:
         return []
 
-@app.post(f"/v{VERSION}/so", tags=["Security Orchestrator Policies"], responses={
+@app.post(f"/v{settings.version}/so", tags=["Security Orchestrator Policies"], responses={
     status.HTTP_400_BAD_REQUEST: {"description": "Missing service 'name' or 'id' from provided Service Specification"},
     status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Could not reach OpenSlice"}
 })
@@ -181,28 +179,28 @@ async def handle_nmtd_policy(service_spec: ServiceSpecWithAction) -> List[Servic
     except HTTPException:
         return []
 
-@app.post(f"/v{VERSION}/telemetry", tags=["Security Orchestrator Policies"], responses={
+@app.post(f"/v{settings.version}/telemetry", tags=["Security Orchestrator Policies"], responses={
     status.HTTP_400_BAD_REQUEST: {"description": "Missing service 'name' or 'id' from provided Service Specification"},
     status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Could not reach OpenSlice"}
 })
 async def handle_telemetry_policy(telemetry_configuration: TelemetryPolicy) -> Optional[ServiceOrder]:
     return await _handle_so_policy(telemetry_configuration)
 
-@app.post(f"/v{VERSION}/firewall", tags=["Security Orchestrator Policies"], responses={
+@app.post(f"/v{settings.version}/firewall", tags=["Security Orchestrator Policies"], responses={
     status.HTTP_400_BAD_REQUEST: {"description": "Missing service 'name' or 'id' from provided Service Specification"},
     status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Could not reach OpenSlice"}
 })
 async def handle_firewall_policy(firewall_configuration: FirewallPolicy) -> Optional[ServiceOrder]:
     return await _handle_so_policy(firewall_configuration)
 
-@app.post(f"/v{VERSION}/siem", tags=["Security Orchestrator Policies"], responses={
+@app.post(f"/v{settings.version}/siem", tags=["Security Orchestrator Policies"], responses={
     status.HTTP_400_BAD_REQUEST: {"description": "Missing service 'name' or 'id' from provided Service Specification"},
     status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Could not reach OpenSlice"}
 })
 async def handle_siem_policy(siem_configuration: SiemPolicy) -> Optional[ServiceOrder]:
     return await _handle_so_policy(siem_configuration)
 
-@app.post(f"/v{VERSION}/channelProtection", tags=["Security Orchestrator Policies"], responses={
+@app.post(f"/v{settings.version}/channelProtection", tags=["Security Orchestrator Policies"], responses={
     status.HTTP_400_BAD_REQUEST: {"description": "Missing service 'name' or 'id' from provided Service Specification"},
     status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Could not reach OpenSlice"}
 })

@@ -5,7 +5,7 @@ from apis.auth import Auth as AuthApi
 from apis.tmf import Tmf as TmfApi
 from models.service_inventory import ServiceInventory
 from models.service_order import ServiceOrder
-from models.service_spec import ServiceSpec, ServiceSpecCharacteristic, ServiceSpecCharacteristicValue, ServiceSpecCharacteristicValueAndAlias, ServiceSpecWithAction
+from models.service_spec import ServiceSpec, ServiceSpecCharacteristic, ServiceSpecCharacteristicValue, ServiceSpecCharacteristicValueAndAlias
 
 class TmfApiConnector:
     _api: TmfApi
