@@ -67,10 +67,13 @@ class TmfApiConnector:
           
     def get_ids_of_service_orders_using_service_spec(self, service_spec: ServiceSpec) -> List[str]:
         try:
-            return [
-                service_order.id for service_order in self.list_active_service_orders() if \
-                service_order.uses_service_spec(service_spec)
-            ]
+            ids_of_service_orders_using_service_spec = []
+            service_order_ids = [service_order.id for service_order in self.list_active_service_orders()]
+            for service_order_id in service_order_ids:
+                service_order = self.get_service_order(service_order_id)
+                if service_order.uses_service_spec(service_spec):
+                    ids_of_service_orders_using_service_spec.append(service_order_id)
+            return ids_of_service_orders_using_service_spec
         except HTTPException:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

@@ -6,7 +6,7 @@ TAG := $(shell . venv/bin/activate && python3 -c "from src.settings import setti
 all: dev
 
 dev:
-	. venv/bin/activate && fastapi dev src/main.py
+	. venv/bin/activate && cd src && uvicorn main:app --port 8004 --reload --log-level debug
 
 build:
 	docker build --network=host -t $(APP_NAME):latest .
