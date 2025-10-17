@@ -16,8 +16,8 @@ run:
 
 push:
 	docker tag $(APP_NAME):latest $(APP_NAME):$(TAG)
-	docker push $(APP_NAME):latest
 	docker push $(APP_NAME):$(TAG)
+	docker push $(APP_NAME):latest
 
 deploy:
 	helm install my-onboarding-tools helm/ --kubeconfig ~/repos/bolsa/one_testbed/kubeconfig

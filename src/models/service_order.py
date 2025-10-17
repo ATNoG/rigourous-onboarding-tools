@@ -75,8 +75,6 @@ class ServiceOrder(BaseModel):
     order_items: Optional[List[OrderItem]] = Field(alias="orderItem", default=None)
 
     def is_active(self) -> bool:
-        if self.state != "COMPLETED":
-            return False
         completion_time = datetime.fromisoformat(self.expected_completion_date.replace("Z", "+00:00"))
         now = datetime.now(timezone.utc)
         return now < completion_time
