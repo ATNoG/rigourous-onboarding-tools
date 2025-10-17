@@ -1,7 +1,7 @@
 APP_NAME = diogosantosua/onboarding-tools
 TAG := $(shell . venv/bin/activate && python3 -c "from src.settings import settings; print(f'{settings.version}.{settings.sub_version}')")
 
-.PHONY: all build run dev
+.PHONY: all build run dev push deploy
 
 all: dev
 

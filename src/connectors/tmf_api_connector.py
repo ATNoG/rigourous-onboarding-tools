@@ -218,7 +218,7 @@ class TmfApiConnector:
     
     def _get_mutable_service_spec_char_values(self, service_spec_characteristic: ServiceSpecCharacteristic) \
     -> List[ServiceSpecCharacteristicValueAndAlias]:
-        IMMUTABLE_ALIASES = {"member_vnf_index", "kdu_name"}
+        IMMUTABLE_ALIASES = {"member_vnf_index", "kdu_name", "valueFrom", "valueTo"}
         return [service_spec_char_value.value for service_spec_char_value in \
                 service_spec_characteristic.service_spec_characteristic_value if \
                 service_spec_char_value.value.alias not in IMMUTABLE_ALIASES]
