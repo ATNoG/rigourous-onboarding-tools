@@ -5,7 +5,7 @@ from apis.auth import Auth as AuthApi
 from apis.tmf import Tmf as TmfApi
 from models.service_inventory import ServiceInventory
 from models.service_order import ServiceOrder
-from models.service_spec import ServiceSpec, ServiceSpecCharacteristic, ServiceSpecCharacteristicValue, ServiceSpecCharacteristicValueAndAlias, ServiceSpecWithAction
+from models.service_spec import ServiceSpec, ServiceSpecCharacteristic, ServiceSpecCharacteristicValue, ServiceSpecCharacteristicValueAndAlias
 
 class TmfApiConnector:
     _api: TmfApi
@@ -18,16 +18,22 @@ class TmfApiConnector:
                 detail="Could not get authorization token from OpenSlice"
             )
         self._api = TmfApi(url, token)
+        
+    def get_service_spec(self, id: str) -> Optional[ServiceSpec]:
+        try:
+            return self._api.get_service_spec(id)
+        except HTTPException:
+            return None
 
     def get_service_order(self, id: str) -> Optional[ServiceOrder]:
         try:
             return self._api.get_service_order(id)
         except HTTPException:
             return None
-        
-    def get_service_spec(self, id: str) -> Optional[ServiceSpec]:
+
+    def get_service_inventory(self, id: str) -> Optional[ServiceInventory]:
         try:
-            return self._api.get_service_spec(id)
+            return self._api.get_service_inventory(id)
         except HTTPException:
             return None
     
@@ -42,20 +48,12 @@ class TmfApiConnector:
 
     def list_active_service_orders(self) -> List[ServiceOrder]:
         try:
-            return self._list_active_service_orders()
+            return [service_order for service_order in self._api.list_service_orders() if service_order.is_active()]
         except HTTPException:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Could not get Service Orders from OpenSlice"
             )
-        
-    def _list_active_service_orders(self) -> List[ServiceOrder]:
-        active_service_orders = []
-        for service_order in self._api.list_service_orders():
-            full_service_order = self._api.get_service_order(service_order.id)
-            if full_service_order and full_service_order.is_active():
-                active_service_orders.append(full_service_order)
-        return active_service_orders
         
     def list_service_specs(self) -> List[ServiceSpec]:
         try:
@@ -66,15 +64,51 @@ class TmfApiConnector:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Could not get Service Specifications from OpenSlice"
             )
+          
+    def get_ids_of_service_orders_using_service_spec(self, service_spec: ServiceSpec) -> List[str]:
+        try:
+            ids_of_service_orders_using_service_spec = []
+            service_order_ids = [service_order.id for service_order in self.list_active_service_orders()]
+            for service_order_id in service_order_ids:
+                service_order = self.get_service_order(service_order_id)
+                if service_order.uses_service_spec(service_spec):
+                    ids_of_service_orders_using_service_spec.append(service_order_id)
+            return ids_of_service_orders_using_service_spec
+        except HTTPException:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Could not get Service Inventory from OpenSlice"
+            )
         
-    def update_service_order(self, service_order_id: str, service_spec: ServiceSpecWithAction) -> Optional[ServiceOrder]:
+    def update_service_orders_and_inventories_from_service_spec(self, service_spec: ServiceSpec) -> List[ServiceOrder]:
+        service_orders = []
+        service_order_ids = self.get_ids_of_service_orders_using_service_spec(service_spec)
+        for service_order_id in service_order_ids:
+            service_order = self.update_service_order_and_inventories(service_order_id, service_spec)
+            if service_order:
+                service_orders.append(service_order)
+        return service_orders
+        
+    def update_service_order_and_inventories(self, service_order_id: str, service_spec: ServiceSpec) -> Optional[ServiceOrder]:
         service_order = self.get_service_order(service_order_id)
+        updated_service_order = self._update_service_order_from_service_spec(service_order, service_spec)
+        service_inventory_ids = {
+            supporting_service.id
+            for order_item in service_order.order_items
+            for supporting_service in order_item.service.supporting_services
+        }
+        for service_inventory_id in service_inventory_ids:
+            self._update_service_inventory(service_inventory_id, service_spec)
+        return updated_service_order
+    
+    def _update_service_order_from_service_spec(self, service_order: ServiceOrder, service_spec: ServiceSpec) -> Optional[ServiceOrder]:
         if not service_order:
             return None
         updated_service_order = \
             self._get_service_order_with_updated_characteristics(service_order, service_spec)
-        if updated_service_order:
-            self._api.update_service_order(service_order_id, updated_service_order.__json__())
+        if not updated_service_order:
+            return None
+        self._api.update_service_order(service_order.id, updated_service_order.__json__())
         return updated_service_order
     
     def _get_service_order_with_updated_characteristics(
@@ -113,7 +147,7 @@ class TmfApiConnector:
         service_order.order_items = order_items
         return service_order
     
-    def update_service_inventory(self, service_inventory_id: str, service_spec: ServiceSpec) -> Optional[ServiceInventory]:
+    def _update_service_inventory(self, service_inventory_id: str, service_spec: ServiceSpec) -> Optional[ServiceInventory]:
         service_inventory = self.get_service_inventory(service_inventory_id)
         if not service_inventory:
             return None
@@ -151,7 +185,6 @@ class TmfApiConnector:
             self._get_updated_service_spec_characteristics(service_spec, matching_service_inventory_chars)
         if updated_service_inventory_characteristics:
             service_inventory.service_spec_characteristic = updated_service_inventory_characteristics
-            # order_item.action = "modify"
         return service_inventory
     
     def _get_updated_service_spec_characteristics(
@@ -185,40 +218,7 @@ class TmfApiConnector:
     
     def _get_mutable_service_spec_char_values(self, service_spec_characteristic: ServiceSpecCharacteristic) \
     -> List[ServiceSpecCharacteristicValueAndAlias]:
-        IMMUTABLE_ALIASES = {"member_vnf_index", "kdu_name"}
+        IMMUTABLE_ALIASES = {"member_vnf_index", "kdu_name", "valueFrom", "valueTo"}
         return [service_spec_char_value.value for service_spec_char_value in \
                 service_spec_characteristic.service_spec_characteristic_value if \
                 service_spec_char_value.value.alias not in IMMUTABLE_ALIASES]
-        
-    def get_ids_of_service_orders_using_service_spec(self, service_spec: ServiceSpec) -> List[str]:
-        try:
-            return [
-                service_order.id for service_order in self.list_active_service_orders() if \
-                service_order.uses_service_spec(service_spec)
-            ]
-        except HTTPException:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Could not get Service Inventory from OpenSlice"
-            )
-
-    def update_service_spec(self, service_spec: ServiceSpec) -> Optional[ServiceSpec]:
-        if not service_spec.id:
-            return None
-        return self._api.update_service_spec(service_spec.id, service_spec.__json__())
-    
-    def get_ids_of_active_service_inventories_from_service_spec_name(self, service_spec: str) -> List[str]:
-        try:
-            return [service_inventory.id for service_inventory in self._api.list_service_inventories() if \
-                    service_inventory.state == "active" and service_inventory.service_type == service_spec]
-        except HTTPException:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Could not get Service Inventories from OpenSlice"
-            )
-        
-    def get_service_inventory(self, id: str) -> Optional[ServiceInventory]:
-        try:
-            return self._api.get_service_inventory(id)
-        except HTTPException:
-            return None
