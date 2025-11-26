@@ -1,6 +1,6 @@
 # RIGOUROUS Onboarding Tools
 
-![Diagram](./integration_diagram.png)
+The Onboarding Tools is capable of performing Moving Target Defense operations on KNF-based network services; receive and enforce policies from the Security Orchestrator; and receive and update the risk score of services based on a Risk Specification provided by the Threat Risk Assessor and Privacy Quantifier from the RIGOUROUS project.
 
 # Installation
 
