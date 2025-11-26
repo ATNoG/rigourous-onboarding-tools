@@ -84,6 +84,6 @@ For services to have their risk specification updated, there needs to be a chara
 }
 ```
 
-## UMU Security Orchestrator integration (WIP)
+## UMU Security Orchestrator integration
 
-Requires OpenSlice "After Activation" LCM rules to send the MSPL policies to the `/osl/<service_order_id>` endpoint of this component, where `<service_order_id>` is the ID of the Service Order. The Security Orchestrator would then translate the MSPL policies into final configurations for OpenSlice Catalog services (envisioned policies to be supported are Firewall, SIEM, Telemetry, and Channel Protection MSPL).
+Requires OpenSlice "After Activation" LCM rules to send the MSPL policies (e.g., Firewall, SIEM, Telemetry, Channel Protection, etc.) to the `/osl/<service_order_id>` endpoint of this component, where `<service_order_id>` is the ID of the Service Order. The Security Orchestrator would then translate the MSPL policies into final configurations for OpenSlice Catalog services.
